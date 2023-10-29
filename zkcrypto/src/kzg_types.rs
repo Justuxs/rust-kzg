@@ -50,6 +50,12 @@ impl ZFr {
     pub fn to_blst_fr(&self) -> blst_fr {
         pc_fr_into_blst_fr(self.fr)
     }
+
+    pub fn montgomery_reduce(&self) -> Self {
+        Self {
+            fr: Scalar::montgomery_reduce(self.fr.0[0], self.fr.0[1], self.fr.0[2], self.fr.0[3], 0, 0, 0, 0),
+        }
+    }
 }
 
 impl KzgFr for ZFr {
@@ -284,6 +290,12 @@ impl ZG1 {
     pub const fn from_blst_p1(p1: blst_p1) -> Self {
         Self {
             proj: blst_p1_into_pc_g1projective(&p1),
+        }
+    }
+
+    pub(crate) fn double(&self) -> ZG1 {
+        Self {
+            proj: self.proj.double()
         }
     }
 

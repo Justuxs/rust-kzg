@@ -5,13 +5,15 @@ use crate::kzg_types::{ZFr as BlstFr, ZG1};
 use kzg::{Fr as KzgFr, G1Mul};
 use kzg::{FFTG1, G1};
 use std::ops::MulAssign;
+use crate::multiscalar_mul::msm_variable_base;
 
-pub fn g1_linear_combination(out: &mut ZG1, points: &[ZG1], scalars: &[BlstFr], len: usize) {
-    *out = ZG1::default();
-    for i in 0..len {
-        let tmp = points[i].mul(&scalars[i]);
-        *out = out.add_or_dbl(&tmp);
-    }
+pub fn g1_linear_combination(out: &mut ZG1, points: &[ZG1], scalars: &[BlstFr], len: usize) -> ZG1 {
+    /**out = ZG1::default();
+        for i in 0..len {
+            let tmp = points[i].mul(&scalars[i]);
+            *out = out.add_or_dbl(&tmp);
+        }*/
+    msm_variable_base(points, scalars)
 }
 pub fn make_data(data: usize) -> Vec<ZG1> {
     let mut vec = Vec::new();
