@@ -1,7 +1,4 @@
-use crate::consts::{
-    G1_GENERATOR, G1_IDENTITY, G1_NEGATIVE_GENERATOR, G2_GENERATOR, G2_NEGATIVE_GENERATOR,
-    SCALE2_ROOT_OF_UNITY,
-};
+use crate::consts::{G1_GENERATOR, G1_IDENTITY, G1_NEGATIVE_GENERATOR, G2_GENERATOR, G2_NEGATIVE_GENERATOR, MODULUS, R2, SCALE2_ROOT_OF_UNITY};
 use crate::fft_g1::g1_linear_combination;
 use crate::kzg_proofs::{
     expand_root_of_unity, pairings_verify, FFTSettings as ZFFTSettings, KZGSettings as ZKZGSettings,
@@ -11,7 +8,7 @@ use crate::utils::{
     blst_fr_into_pc_fr, blst_p1_into_pc_g1projective, blst_p2_into_pc_g2projective,
     pc_fr_into_blst_fr, pc_g1projective_into_blst_p1, pc_g2projective_into_blst_p2,
 };
-use bls12_381::{G1Affine, G1Projective, G2Affine, G2Projective, Scalar, MODULUS, R2};
+use bls12_381::{G1Affine, G1Projective, G2Affine, G2Projective, Scalar};
 use blst::{blst_fr, blst_p1};
 use ff::Field;
 use kzg::common_utils::reverse_bit_order;
@@ -40,6 +37,8 @@ fn bigint_check_mod_256(a: &[u64; 4]) -> bool {
 pub struct ZFr {
     pub fr: Scalar,
 }
+
+pub struct EmptyScalar(pub [u64; 4]);
 
 impl ZFr {
     pub fn from_blst_fr(fr: blst_fr) -> Self {
@@ -84,7 +83,8 @@ impl KzgFr for ZFr {
                 )
             })
             .and_then(|bytes: &[u8; BYTES_PER_FIELD_ELEMENT]| {
-                let mut tmp = Scalar([0, 0, 0, 0]);
+                let mut tmp = EmptyScalar([0, 0, 0, 0]);
+                let mut tmp2 = EmptyScalar([0, 0, 0, 0]);
 
                 tmp.0[0] = u64::from_be_bytes(<[u8; 8]>::try_from(&bytes[0..8]).unwrap());
                 tmp.0[1] = u64::from_be_bytes(<[u8; 8]>::try_from(&bytes[8..16]).unwrap());
@@ -96,12 +96,13 @@ impl KzgFr for ZFr {
                 let (_, borrow) = sbb(tmp.0[1], MODULUS.0[1], borrow);
                 let (_, borrow) = sbb(tmp.0[2], MODULUS.0[2], borrow);
                 let (_, _borrow) = sbb(tmp.0[3], MODULUS.0[3], borrow);
-                let mut tmp2 = Scalar::default();
 
                 tmp2.0[0] = tmp.0[3];
                 tmp2.0[1] = tmp.0[2];
                 tmp2.0[2] = tmp.0[1];
                 tmp2.0[3] = tmp.0[0];
+
+                let scalar = Scalar(tmp2.0);
 
                 let is_zero: bool = tmp2.is_zero().into();
                 if !is_zero && !bigint_check_mod_256(&tmp2.0) {
