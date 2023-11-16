@@ -6,3 +6,6 @@ pub mod g1;
 pub mod g2;
 pub mod kzg_settings;
 pub mod poly;
+pub mod multiscalar_mul;
+
+
