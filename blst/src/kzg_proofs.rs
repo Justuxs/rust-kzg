@@ -33,7 +33,7 @@ impl PairingVerify<FsG1, FsG2> for FsG1 {
     }
 }
 
-pub fn g1_linear_combination(out: &mut FsG1, points: &[FsG1], scalars: &[FsFr], len: usize) {
+pub fn g1_linear_combination(out: &mut FsG1, points: &[FsG1], scalars: &[FsFr], _len: usize) {
     let g1 = msm_variable_base(points, scalars);
     *out = g1;
 }

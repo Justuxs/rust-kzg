@@ -1,15 +1,44 @@
-
 //! Multiscalar multiplication implementation using pippenger algorithm.
-use blst::{blst_fr, blst_p1, blst_p1_add, blst_p1_double, blst_p1_in_g1};
+// use dusk_bytes::Serializable;
+
+// use alloc::vec::*;
+
+use blst::{blst_fr, blst_p1};
 use kzg::{Fr, G1};
 use crate::types::fr::{FsFr as Scalar, FsFr};
 use crate::types::g1::{FsG1 as G1Projective, FsG1};
-/// Performs multiscalar multiplication reliying on Pippenger's algorithm.
-/// This method was taken from `curve25519-dalek` and was originally made by
-/// Oleg Andreev <oleganza@gmail.com>.
 
+use blst::blst_p1_double;
+pub fn divn(mut scalar: Scalar, mut n: u32) -> Scalar {
+    if n >= 256 {
+        return Scalar::zero();
+    }
+
+    while n >= 64 {
+        let mut t = 0;
+        for i in scalar.0.l.iter_mut().rev() {
+            core::mem::swap(&mut t, i);
+        }
+        n -= 64;
+    }
+
+    if n > 0 {
+        let mut t = 0;
+        for i in scalar.0.l.iter_mut().rev() {
+            let t2 = *i << (64 - n);
+            *i >>= n;
+            *i |= t;
+            t = t2;
+        }
+    }
+
+    scalar
+}
+
+/// Performs a Variable Base Multiscalar Multiplication.
 #[allow(clippy::needless_collect)]
 pub fn msm_variable_base(points: &[G1Projective], scalars: &[Scalar]) -> G1Projective {
+
     #[cfg(feature = "parallel")]
     use rayon::prelude::*;
 
@@ -49,9 +78,6 @@ pub fn msm_variable_base(points: &[G1Projective], scalars: &[Scalar]) -> G1Proje
                             res = res.add(base);
                         }
                     } else {
-
-                        // We right-shift by w_start, thus getting rid of the
-                        // lower bits.
                         let mut scalar = montgomery_reduce(
                             scalar.0.l[0],
                             scalar.0.l[1],
@@ -63,32 +89,26 @@ pub fn msm_variable_base(points: &[G1Projective], scalars: &[Scalar]) -> G1Proje
                             0,
                         );
 
-                        let scalar = divn(scalar, w_start as u32);
-
+                        // We right-shift by w_start, thus getting rid of the
+                        // lower bits.
+                        scalar = divn(scalar, w_start as u32);
                         // We mod the remaining bits by the window size.
-                        let inside = scalar.0;
-                        let scalar = inside.l[0] % (1 << c);
+                        let scalar = scalar.0.l[0] % (1 << c);
 
                         // If the scalar is non-zero, we update the corresponding
                         // bucket.
                         // (Recall that `buckets` doesn't have a zero bucket.)
                         if scalar != 0 {
-                            let space = (scalar - 1) as usize;
                             buckets[(scalar - 1) as usize] =
                                 buckets[(scalar - 1) as usize].add(base);
                         }
                     }
                 });
-            let mut i = 0;
+
             let mut running_sum = G1Projective::identity();
-            for b in buckets.into_iter(){
-                i = i+1;
-                let respo = running_sum.add(&b);
-                let res = res.add(&respo);
-                if( i == 429){
-                    let running_sume = running_sum;
-                    let rese = res;
-                }
+            for b in buckets.into_iter().rev() {
+                running_sum = running_sum.add(&b);
+                res = res.add(&running_sum);
             }
 
             res
@@ -98,26 +118,27 @@ pub fn msm_variable_base(points: &[G1Projective], scalars: &[Scalar]) -> G1Proje
     // We store the sum for the lowest window.
     let lowest = *window_sums.first().unwrap();
     // We're traversing windows from high to low.
-    let other = window_sums[1..]
-        .iter()
-        .rev()
-        .fold(zero, |mut total, sum_i| unsafe {
-            total = total.add(sum_i);
-            for _ in 0..c {
-                let mut total_p1 = blst_p1::default();
-                let raw_pointer = &mut total_p1 as *mut blst_p1;
-                let total_p1_ptr = &mut total.0 as *mut blst_p1;
+    let mut a = zero;
 
-               blst_p1_double(raw_pointer, total_p1_ptr);
-                total.0 = *raw_pointer;
-                let ok = total.0;
-                let ww= *raw_pointer;
-                let ss = *total_p1_ptr;
+    for sum_i in window_sums[1..].iter().rev() {
+        let mut total = a;
+
+        for _ in 0..c {
+            let a: blst_p1 = total.0;
+            let mut out: blst_p1 = Default::default();
+
+            unsafe {
+                blst_p1_double(&mut out as *mut blst_p1, &a as *const blst_p1);
             }
-            total
-        });
-    let answer = other.add(&lowest);
-    return answer;
+
+            total = FsG1(out);
+        }
+
+        a = a.add(&total);
+    }
+
+    a = a.add(&lowest);
+    return a;
 }
 
 fn ln_without_floats(a: usize) -> usize {
@@ -131,33 +152,6 @@ fn log2(x: usize) -> u32 {
 
     let n = x.leading_zeros();
     core::mem::size_of::<usize>() as u32 * 8 - n
-}
-
-#[inline]
-pub fn divn(mut scalar: Scalar, mut n: u32) -> Scalar {
-    if n >= 256 {
-        return Scalar::zero();
-    }
-
-    while n >= 64 {
-        let mut t = 0;
-        for i in scalar.0.l.iter_mut().rev() {
-            core::mem::swap(&mut t, i);
-        }
-        n -= 64;
-    }
-
-    if n > 0 {
-        let mut t = 0;
-        for i in scalar.0.l.iter_mut().rev() {
-            let t2 = *i << (64 - n);
-            *i >>= n;
-            *i |= t;
-            t = t2;
-        }
-    }
-
-    scalar
 }
 
 pub const MODULUS: Scalar = Scalar(blst_fr{
@@ -232,7 +226,7 @@ pub fn montgomery_reduce(
         ],
     };
 
-    let mut scalar = Scalar(blst_fr);
+    let scalar = Scalar(blst_fr);
     let modulus = MODULUS;
     scalar.sub(&modulus);
     scalar
