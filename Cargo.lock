@@ -636,6 +636,7 @@ dependencies = [
  "num_cpus",
  "rayon",
  "sha2",
+ "threadpool",
 ]
 
 [[package]]
