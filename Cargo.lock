@@ -817,8 +817,8 @@ dependencies = [
  "blst",
  "num_cpus",
  "rayon",
- "sha2 0.10.8",
-]
+ "sha2",
+ "threadpool"]
 
 [[package]]
 name = "kzg-bench"

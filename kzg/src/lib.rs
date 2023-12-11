@@ -4,9 +4,11 @@ extern crate alloc;
 
 use alloc::string::String;
 use alloc::vec::Vec;
+use core::fmt::Debug;
 
 pub mod common_utils;
 pub mod eip_4844;
+pub mod msm;
 
 pub trait Fr: Default + Clone + PartialEq + Sync {
     fn null() -> Self;
@@ -65,7 +67,9 @@ pub trait Fr: Default + Clone + PartialEq + Sync {
     }
 }
 
-pub trait G1: Clone + Default + PartialEq + Sync {
+pub trait G1: Clone + Default + PartialEq + Sync + Debug + Send {
+    const ZERO: Self;
+
     fn identity() -> Self;
 
     fn generator() -> Self;
@@ -81,7 +85,7 @@ pub trait G1: Clone + Default + PartialEq + Sync {
 
     fn to_bytes(&self) -> [u8; 48];
 
-    fn add_or_dbl(&mut self, b: &Self) -> Self;
+    fn add_or_dbl(&self, b: &Self) -> Self;
 
     fn is_inf(&self) -> bool;
 
@@ -98,6 +102,30 @@ pub trait G1: Clone + Default + PartialEq + Sync {
     fn eq(&self, other: &Self) -> bool {
         self.equals(other)
     }
+
+    fn add_or_dbl_assign(&mut self, b: &Self);
+    fn add_assign(&mut self, b: &Self);
+    fn dbl_assign(&mut self);
+}
+
+pub trait G1GetFp<TFp: G1Fp>: G1 + Clone {
+    // Return field X of G1
+    fn x(&self) -> &TFp;
+
+    // Return field Y of G1
+    fn y(&self) -> &TFp;
+
+    // Return field Z of G1
+    fn z(&self) -> &TFp;
+
+    // Return field X of G1 as mutable
+    fn x_mut(&mut self) -> &mut TFp;
+
+    // Return field Y of G1 as mutable
+    fn y_mut(&mut self) -> &mut TFp;
+
+    // Return field Z of G1 as mutable
+    fn z_mut(&mut self) -> &mut TFp;
 }
 
 pub trait G1Mul<TFr: Fr>: G1 + Clone {
@@ -105,6 +133,205 @@ pub trait G1Mul<TFr: Fr>: G1 + Clone {
 
     // Instead of creating separate trait, keep linear comb here for simplicity
     fn g1_lincomb(points: &[Self], scalars: &[TFr], len: usize) -> Self;
+}
+
+pub trait G1Fp: Clone + Default + Sync + Copy + PartialEq + Debug + Send {
+    const ZERO: Self;
+    const ONE: Self;
+    const BLS12_381_RX_P: Self;
+
+    fn inverse(&self) -> Option<Self>;
+
+    fn square(&self) -> Self;
+    fn double(&self) -> Self;
+
+    fn from_underlying_arr(arr: &[u64; 6]) -> Self;
+
+    fn neg_assign(&mut self);
+
+    fn mul_assign_fp(&mut self, b: &Self);
+
+    fn sub_assign_fp(&mut self, b: &Self);
+
+    fn add_assign_fp(&mut self, b: &Self);
+
+    fn neg(mut self) -> Self {
+        self.neg_assign();
+        self
+    }
+
+    fn mul_fp(mut self, b: &Self) -> Self {
+        self.mul_assign_fp(b);
+        self
+    }
+
+    fn sub_fp(mut self, b: &Self) -> Self {
+        self.sub_assign_fp(b);
+        self
+    }
+
+    fn add_fp(mut self, b: &Self) -> Self {
+        self.add_assign_fp(b);
+        self
+    }
+
+    fn is_zero(&self) -> bool {
+        *self == Self::ZERO
+    }
+
+    fn set_zero(&mut self) {
+        *self = Self::ZERO;
+    }
+
+    fn is_one(&self) -> bool {
+        *self == Self::ONE
+    }
+
+    fn set_one(&mut self) {
+        *self = Self::ONE;
+    }
+}
+
+pub trait G1Affine<TG1: G1, TG1Fp: G1Fp>:
+    Clone + Default + PartialEq + Sync + Copy + Debug + Send
+{
+    const ZERO: Self;
+
+    fn into_affine(g1: &TG1) -> Self;
+
+    // Batch conversion can be faster than transforming each individually
+    fn into_affines_loc(out: &mut [Self], g1: &[TG1]);
+
+    fn into_affines(g1: &[TG1]) -> Vec<Self> {
+        let mut vec = Vec::<Self>::with_capacity(g1.len());
+        #[allow(clippy::uninit_vec)]
+        unsafe {
+            vec.set_len(g1.len());
+        }
+        Self::into_affines_loc(&mut vec, g1);
+        vec
+    }
+
+    fn to_proj(&self) -> TG1;
+
+    // Return field X of Affine
+    fn x(&self) -> &TG1Fp;
+
+    // Return field Y of Affine
+    fn y(&self) -> &TG1Fp;
+
+    // Return field X of Affine as mutable
+    fn x_mut(&mut self) -> &mut TG1Fp;
+
+    // Return field Y of Affine as mutable
+    fn y_mut(&mut self) -> &mut TG1Fp;
+
+    // Return whether Affine is at infinity
+    fn is_infinity(&self) -> bool;
+
+    // Return whether Affine is zero
+    fn is_zero(&self) -> bool {
+        *self == Self::ZERO
+    }
+
+    fn set_zero(&mut self) {
+        *self = Self::ZERO;
+    }
+}
+
+pub trait G1ProjAddAffine<TG1: G1, TG1Fp: G1Fp, TG1Affine: G1Affine<TG1, TG1Fp>>:
+    Sized + Sync + Send
+{
+    fn add_assign_affine(proj: &mut TG1, aff: &TG1Affine);
+
+    fn add_or_double_assign_affine(proj: &mut TG1, aff: &TG1Affine);
+
+    fn add_affine(mut proj: TG1, aff: &TG1Affine) -> TG1 {
+        Self::add_assign_affine(&mut proj, aff);
+        proj
+    }
+
+    fn add_or_double_affine(mut proj: TG1, aff: &TG1Affine) -> TG1 {
+        Self::add_or_double_assign_affine(&mut proj, aff);
+        proj
+    }
+
+    fn sub_assign_affine(proj: &mut TG1, mut aff: TG1Affine) {
+        aff.y_mut().neg_assign();
+        Self::add_assign_affine(proj, &aff);
+    }
+}
+
+#[derive(Debug, Default, PartialEq, Eq, Clone, Copy)]
+pub struct Scalar256 {
+    data: [u64; 4],
+}
+
+#[allow(unused)]
+impl Scalar256 {
+    const ONE: Self = Self { data: [1, 0, 0, 0] };
+    const ZERO: Self = Self { data: [0; 4] };
+
+    pub fn from_u64_s(arr: u64) -> Self {
+        Scalar256 {
+            data: [arr, 0, 0, 0],
+        }
+    }
+
+    pub fn from_u64(arr: [u64; 4]) -> Self {
+        Scalar256 { data: arr }
+    }
+
+    pub fn from_u8(arr: &[u8; 32]) -> Self {
+        Scalar256 {
+            data: Self::cast_scalar_to_u64_arr(arr),
+        }
+    }
+
+    pub fn as_u8(&self) -> &[u8] {
+        // FIXME: This is probably not super correct
+        unsafe { core::slice::from_raw_parts(&*(self.data.as_ptr() as *const u8), 32) }
+    }
+
+    const fn cast_scalar_to_u64_arr<const N: usize, const N_U8: usize>(
+        input: &[u8; N_U8],
+    ) -> [u64; N] {
+        let ptr = input.as_ptr();
+
+        unsafe { core::slice::from_raw_parts(&*(ptr as *const [u64; N]), 1)[0] }
+    }
+
+    fn is_zero(&self) -> bool {
+        self.data == Self::ZERO.data
+    }
+
+    fn divn(&mut self, mut n: u32) {
+        const N: usize = 4;
+        if n >= (64 * N) as u32 {
+            *self = Self::from_u64_s(0);
+            return;
+        }
+
+        while n >= 64 {
+            let mut t = 0;
+            for i in 0..N {
+                core::mem::swap(&mut t, &mut self.data[N - i - 1]);
+            }
+            n -= 64;
+        }
+
+        if n > 0 {
+            let mut t = 0;
+            #[allow(unused)]
+            for i in 0..N {
+                let a = &mut self.data[N - i - 1];
+                let t2 = *a << (64 - n);
+                *a >>= n;
+                *a |= t;
+                t = t2;
+            }
+        }
+    }
 }
 
 pub trait G2: Clone + Default {
