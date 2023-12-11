@@ -55,7 +55,7 @@ pub fn fr_equal_works<TFr: Fr>() {
     assert!(!a.equals(&b));
 }
 
-pub fn fr_negate_works<TFr: Fr>() {
+pub fn fr_negate_works<TFr: Fr + std::fmt::Debug>() {
     let m1: [u64; 4] = [
         0xffffffff00000000,
         0x53bda402fffe5bfe,
@@ -183,7 +183,7 @@ pub fn g1_make_linear_combination<TFr: Fr, TG1: G1 + G1Mul<TFr> + Copy>(
 
     g1_linear_combination(&mut res, &p, &coeffs, len);
 
-    assert!(exp.equals(&res));
+    assert_eq!(exp, res);
 }
 
 #[allow(clippy::type_complexity)]

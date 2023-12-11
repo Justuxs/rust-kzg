@@ -17,12 +17,12 @@ pub fn proof_single<
     generate_trusted_setup: &dyn Fn(usize, [u8; 32usize]) -> (Vec<TG1>, Vec<TG2>),
 ) {
     // Our polynomial: degree 15, 16 coefficients
-    let coeffs = vec![1, 2, 3, 4, 7, 7, 7, 7, 13, 13, 13, 13, 13, 13, 13, 13];
+    let coeffs = [1, 2, 3, 4, 7, 7, 7, 7, 13, 13, 13, 13, 13, 13, 13, 13];
     let poly_len = coeffs.len();
     let secrets_len = poly_len + 1;
 
     // Create the polynomial
-    let mut p = TPoly::new(poly_len).unwrap();
+    let mut p = TPoly::new(poly_len);
     for (x, &coeff) in coeffs.iter().enumerate() {
         p.set_coeff_at(x, &TFr::from_u64(coeff));
     }
@@ -68,7 +68,7 @@ pub fn commit_to_nil_poly<
         let fs = TFFTSettings::new(4).unwrap();
         let ks = TKZGSettings::new(&s1, &s2, secrets_len, &fs).unwrap();
 
-        let a = TPoly::new(0).unwrap();
+        let a = TPoly::new(0);
         let result = ks.commit_to_poly(&a).unwrap();
         assert!(result.equals(&TG1::default()));
     }
@@ -95,7 +95,7 @@ pub fn commit_to_too_long_poly<
         let fs = TFFTSettings::new(4).unwrap();
         let ks = TKZGSettings::new(&s1, &s2, secrets_len, &fs).unwrap();
 
-        let a = TPoly::new(poly_len).unwrap();
+        let a = TPoly::new(poly_len);
         let _result = ks.commit_to_poly(&a);
     }
 }
@@ -119,7 +119,7 @@ pub fn commit_to_too_long_poly_returns_err<
     let fs = TFFTSettings::new(4).unwrap();
     let ks = TKZGSettings::new(&s1, &s2, secrets_len, &fs).unwrap();
 
-    let a = TPoly::new(poly_len).unwrap();
+    let a = TPoly::new(poly_len);
     let _result = ks.commit_to_poly(&a);
     assert!(_result.is_err());
 }
@@ -136,7 +136,7 @@ pub fn proof_multi<
     generate_trusted_setup: &dyn Fn(usize, [u8; 32usize]) -> (Vec<TG1>, Vec<TG2>),
 ) {
     // Our polynomial: degree 15, 16 coefficients
-    let coeffs = vec![1, 2, 3, 4, 7, 7, 7, 7, 13, 13, 13, 13, 13, 13, 13, 13];
+    let coeffs = [1, 2, 3, 4, 7, 7, 7, 7, 13, 13, 13, 13, 13, 13, 13, 13];
     let poly_len = coeffs.len();
 
     // Compute proof at 2^coset_scale points
@@ -151,7 +151,7 @@ pub fn proof_multi<
     };
 
     // Create the polynomial
-    let mut p = TPoly::new(poly_len).unwrap();
+    let mut p = TPoly::new(poly_len);
     for (x, &coeff) in coeffs.iter().enumerate() {
         p.set_coeff_at(x, &TFr::from_u64(coeff));
     }

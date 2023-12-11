@@ -5,9 +5,10 @@ use alloc::string::String;
 use alloc::string::ToString;
 
 use blst::{
-    blst_fr, blst_fr_add, blst_fr_cneg, blst_fr_eucl_inverse, blst_fr_from_scalar,
-    blst_fr_from_uint64, blst_fr_inverse, blst_fr_mul, blst_fr_sqr, blst_fr_sub, blst_scalar,
-    blst_scalar_fr_check, blst_scalar_from_fr, blst_scalar_from_lendian, blst_uint64_from_fr,
+    blst_bendian_from_scalar, blst_fr, blst_fr_add, blst_fr_cneg, blst_fr_eucl_inverse,
+    blst_fr_from_scalar, blst_fr_from_uint64, blst_fr_inverse, blst_fr_mul, blst_fr_sqr,
+    blst_fr_sub, blst_scalar, blst_scalar_fr_check, blst_scalar_from_bendian, blst_scalar_from_fr,
+    blst_uint64_from_fr,
 };
 use kzg::eip_4844::BYTES_PER_FIELD_ELEMENT;
 use kzg::Fr;
@@ -58,13 +59,34 @@ impl Fr for FsFr {
                 let mut bls_scalar = blst_scalar::default();
                 let mut fr = blst_fr::default();
                 unsafe {
-                    blst_scalar_from_lendian(&mut bls_scalar, bytes.as_ptr());
+                    blst_scalar_from_bendian(&mut bls_scalar, bytes.as_ptr());
                     if !blst_scalar_fr_check(&bls_scalar) {
                         return Err("Invalid scalar".to_string());
                     }
                     blst_fr_from_scalar(&mut fr, &bls_scalar);
                 }
                 Ok(Self(fr))
+            })
+    }
+
+    fn from_bytes_unchecked(bytes: &[u8]) -> Result<Self, String> {
+        bytes
+            .try_into()
+            .map_err(|_| {
+                format!(
+                    "Invalid byte length. Expected {}, got {}",
+                    BYTES_PER_FIELD_ELEMENT,
+                    bytes.len()
+                )
+            })
+            .map(|bytes: &[u8; BYTES_PER_FIELD_ELEMENT]| {
+                let mut bls_scalar = blst_scalar::default();
+                let mut fr = blst_fr::default();
+                unsafe {
+                    blst_scalar_from_bendian(&mut bls_scalar, bytes.as_ptr());
+                    blst_fr_from_scalar(&mut fr, &bls_scalar);
+                }
+                Self(fr)
             })
     }
 
@@ -88,11 +110,13 @@ impl Fr for FsFr {
 
     fn to_bytes(&self) -> [u8; 32] {
         let mut scalar = blst_scalar::default();
+        let mut bytes = [0u8; 32];
         unsafe {
             blst_scalar_from_fr(&mut scalar, &self.0);
+            blst_bendian_from_scalar(bytes.as_mut_ptr(), &scalar);
         }
 
-        scalar.b
+        bytes
     }
 
     fn to_u64_arr(&self) -> [u64; 4] {
@@ -226,16 +250,5 @@ impl Fr for FsFr {
         }
 
         val_a[0] == val_b[0] && val_a[1] == val_b[1] && val_a[2] == val_b[2] && val_a[3] == val_b[3]
-    }
-}
-
-impl FsFr {
-    pub fn hash_to_bls_field(scalar: [u8; 32usize]) -> Self {
-        let bls_scalar = blst_scalar { b: scalar };
-        let mut fr = blst_fr::default();
-        unsafe {
-            blst_fr_from_scalar(&mut fr, &bls_scalar);
-        }
-        Self(fr)
     }
 }
