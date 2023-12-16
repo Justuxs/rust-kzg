@@ -195,7 +195,7 @@ pub trait G1Fp: Clone + Default + Sync + Copy + PartialEq + Debug + Send {
 pub trait G1Affine<TG1: G1, TG1Fp: G1Fp>:
     Clone + Default + PartialEq + Sync + Copy + Debug + Send
 {
-    const ZERO: Self;
+    fn ZERO() -> Self;
 
     fn into_affine(g1: &TG1) -> Self;
 
@@ -231,11 +231,11 @@ pub trait G1Affine<TG1: G1, TG1Fp: G1Fp>:
 
     // Return whether Affine is zero
     fn is_zero(&self) -> bool {
-        *self == Self::ZERO
+        *self == Self::ZERO()
     }
 
     fn set_zero(&mut self) {
-        *self = Self::ZERO;
+        *self = Self::ZERO();
     }
 }
 

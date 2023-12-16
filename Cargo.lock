@@ -817,8 +817,9 @@ dependencies = [
  "blst",
  "num_cpus",
  "rayon",
- "sha2",
- "threadpool"]
+ "sha2 0.10.8",
+ "threadpool",
+]
 
 [[package]]
 name = "kzg-bench"
@@ -1239,6 +1240,7 @@ dependencies = [
  "byteorder",
  "criterion 0.5.1",
  "ff",
+ "group",
  "hex",
  "kzg",
  "kzg-bench",

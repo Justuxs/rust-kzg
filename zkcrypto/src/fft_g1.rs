@@ -1,15 +1,66 @@
 use crate::consts::G1_GENERATOR;
 use crate::kzg_proofs::FFTSettings;
-use crate::kzg_types::{ZFr, ZG1};
+use crate::kzg_types::{FsFp, FsG1Affine, FsG1ProjAddAffine, ZFr, ZG1};
 use crate::multiscalar_mul::msm_variable_base;
-use kzg::{Fr as KzgFr, G1Mul};
+use kzg::{Fr as KzgFr, G1Affine, G1Mul, Scalar256};
 use kzg::{FFTG1, G1};
 use std::ops::MulAssign;
+use bls12_381 ::Scalar;
+use kzg::msm::tilling_parallel_pippinger::{parallel_affine_conv, tiling_parallel_pippinger};
 
-#[warn(unused_variables)]
+/*#[warn(unused_variables)]
 pub fn g1_linear_combination(out: &mut ZG1, points: &[ZG1], scalars: &[ZFr], _len: usize) {
     let g1 = msm_variable_base(points, scalars);
     out.proj = g1
+}*/
+
+pub fn g1_linear_combination(out: &mut ZG1, points: &[ZG1], scalars: &[ZFr], len: usize) {
+    if len < 8 {
+        *out = ZG1::default();
+        for i in 0..len {
+            let tmp = points[i].mul(&scalars[i]);
+            *out = out.add_or_dbl(&tmp);
+        }
+        return;
+    }
+
+    #[cfg(feature = "parallel")]
+    {
+        // Atleast on my machine - performance was *slightly worse* with the parallel version
+        // let points = FsG1Affine::into_affines(points);
+        let points = parallel_affine_conv::<ZG1, FsFp, FsG1Affine>(points);
+
+        let scalars = scalars
+            .iter()
+            .map(|b| {
+                let mut scalar = b.fr;
+                Scalar256::from_u64(scalar.0)
+            })
+            .collect::<Vec<_>>();
+        *out = tiling_parallel_pippinger(&points, scalars.as_slice());
+    }
+
+    #[cfg(not(feature = "parallel"))]
+    {
+        let ark_points = FsG1Affine::into_affines(points);
+        let ark_scalars = {
+            scalars
+                .iter()
+                .take(len)
+                .map(|scalar| {
+                    let bytes: [u8; 32] = scalar.fr.into();
+                    Scalar256::from_u8(&bytes) //klaida
+                })
+                .collect::<Vec<_>>()
+        };
+
+        *out = kzg::msm::arkmsm_msm::VariableBaseMSM::multi_scalar_mul::<
+            ZG1,
+            FsFp,
+            FsG1Affine,
+            FsG1ProjAddAffine,
+        >(&ark_points, &ark_scalars)
+    }
 }
 pub fn make_data(data: usize) -> Vec<ZG1> {
     let mut vec = Vec::new();

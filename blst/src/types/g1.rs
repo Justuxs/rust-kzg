@@ -273,18 +273,16 @@ impl G1Mul<FsFr> for FsG1 {
 pub struct FsG1Affine(pub blst_p1_affine);
 
 impl G1Affine<FsG1, FsFp> for FsG1Affine {
-    const ZERO: Self = Self(blst_p1_affine {
-        x: {
-            blst_fp {
-                l: [0, 0, 0, 0, 0, 0],
+
+    fn ZERO() -> Self {
+        Self {
+            0 : blst_p1_affine {
+                x: blst_fp { l: [0, 0, 0, 0, 0, 0] },
+                y: blst_fp { l: [0, 0, 0, 0, 0, 0] },
             }
-        },
-        y: {
-            blst_fp {
-                l: [0, 0, 0, 0, 0, 0],
-            }
-        },
-    });
+        }
+    }
+
 
     fn into_affine(g1: &FsG1) -> Self {
         let mut ret: Self = Default::default();
