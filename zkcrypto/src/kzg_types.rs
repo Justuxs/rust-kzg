@@ -963,13 +963,15 @@ impl KzgAffine<ZG1, FsFp> for FsG1Affine {
          }
     }
 
-    const ZERO: Self = (Self {
-        0 : G1Affine {
-            x: Fp::zero(),
-            y: Fp::zero(),
-            infinity: Choice::from(1),
-        },
-    });
+    fn ZERO() -> Self {
+        Self {
+            0 : G1Affine {
+                x: Fp::zero(),
+                y: Fp::zero(),
+                infinity: Choice::from(1),
+            },
+        }
+    }
 }
 
 
