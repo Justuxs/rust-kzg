@@ -11,18 +11,18 @@ use crate::utils::{
     blst_fr_into_pc_fr, blst_p1_into_pc_g1projective, blst_p2_into_pc_g2projective,
     pc_fr_into_blst_fr, pc_g1projective_into_blst_p1, pc_g2projective_into_blst_p2,
 };
-use bls12_381::{G1Affine, G1Projective, G2Affine, G2Projective, Scalar, MODULUS, R2};
-use blst::{blst_fr, blst_p1};
+use bls12_381::{G1Affine, G1Projective, G2Affine, G2Projective, Scalar, MODULUS, R2, Fp};
+use blst::{blst_fp, blst_fr, blst_p1, blst_p1_affine};
 use ff::Field;
 use kzg::common_utils::reverse_bit_order;
 use kzg::eip_4844::{BYTES_PER_FIELD_ELEMENT, BYTES_PER_G1, BYTES_PER_G2};
-use kzg::{
-    FFTFr, FFTSettings, Fr as KzgFr, G1Mul, G2Mul, KZGSettings, PairingVerify, Poly, G1, G2,
-};
-use std::ops::{Mul, Sub};
+use kzg::{FFTFr, FFTSettings, Fr as KzgFr, G1Mul, G2Mul, KZGSettings, PairingVerify, Poly, G1, G2, G1Fp, G1ProjAddAffine, Scalar256, G1GetFp};
+use std::ops::{Add, AddAssign, Mul, MulAssign, Neg, Sub, SubAssign};
+use std::ptr;
+use ff::derive::bitvec::macros::internal::funty::Fundamental;
 
 use ff::derive::sbb;
-use subtle::{ConstantTimeEq, CtOption};
+use subtle::{Choice, ConstantTimeEq, CtOption};
 
 fn to_scalar(zfr: &ZFr) -> Scalar {
     zfr.fr
@@ -283,6 +283,12 @@ impl KzgFr for ZFr {
     fn equals(&self, b: &Self) -> bool {
         self.fr == b.fr
     }
+
+    fn to_scalar(&self) -> Scalar256 {
+        Scalar256{
+            data: self.fr.0
+        }
+    }
 }
 
 #[derive(Debug, Default, PartialEq, Eq, Clone, Copy)]
@@ -376,12 +382,6 @@ impl G1 for ZG1 {
         let g1_affine = G1Affine::from(self.proj);
         g1_affine.to_compressed()
     }
-    //zyme
-    fn add_or_dbl(&mut self, b: &Self) -> Self {
-        Self {
-            proj: self.proj + b.proj,
-        }
-    }
     fn is_inf(&self) -> bool {
         bool::from(self.proj.is_identity())
     }
@@ -396,7 +396,7 @@ impl G1 for ZG1 {
     }
     fn add(&self, b: &Self) -> Self {
         Self {
-            proj: self.proj + b.proj,
+            proj: self.proj.add(&b.proj),
         }
     }
 
@@ -409,6 +409,51 @@ impl G1 for ZG1 {
     fn equals(&self, b: &Self) -> bool {
         self.proj.eq(&b.proj)
     }
+
+    const ZERO: ZG1 = ZG1::from_blst_p1(blst_p1 {
+        x: blst_fp {
+            l: [
+                8505329371266088957,
+                17002214543764226050,
+                6865905132761471162,
+                8632934651105793861,
+                6631298214892334189,
+                1582556514881692819,
+            ],
+        },
+        y: blst_fp {
+            l: [
+                8505329371266088957,
+                17002214543764226050,
+                6865905132761471162,
+                8632934651105793861,
+                6631298214892334189,
+                1582556514881692819,
+            ],
+        },
+        z: blst_fp {
+            l: [0, 0, 0, 0, 0, 0],
+        },
+    });
+
+    fn add_or_dbl_assign(&mut self, b: &Self) {
+        self.proj += b.proj;
+    }
+
+    fn add_assign(&mut self, b: &Self) {
+        self.proj.add_assign(b.proj);
+    }
+
+    fn dbl_assign(&mut self) {
+        self.proj.double();
+    }
+
+    fn add_or_dbl(&self, b: &Self) -> Self {
+        Self {
+            proj: self.proj + b.proj,
+        }
+    }
+
 }
 
 impl G1Mul<ZFr> for ZG1 {
@@ -743,3 +788,201 @@ impl KZGSettings<ZFr, ZG1, ZG2, ZFFTSettings, PolyData> for ZKZGSettings {
         &self.secret_g2
     }
 }
+
+#[repr(C)]
+#[derive(Debug, Default, Clone, Copy, Eq, PartialEq)]
+pub struct FsFp(pub Fp);
+impl G1Fp for FsFp {
+    const ONE: Self = Self(Fp::one());
+
+    const ZERO: Self = Self(Fp::zero());
+
+
+    const BLS12_381_RX_P: Self = Self(Fp {  //cia
+        0: [
+            8505329371266088957,
+            17002214543764226050,
+            6865905132761471162,
+            8632934651105793861,
+            6631298214892334189,
+            1582556514881692819,
+        ],
+    });
+/*
+    const BLS12_381_RX_P: Self = Self(Fp([
+        0x7609_0000_0002_fffd,
+        0xebf4_000b_c40c_0002,
+        0x5f48_9857_53c7_58ba,
+        0x77ce_5853_7052_5745,
+        0x5c07_1a97_a256_ec6d,
+        0x15f6_5ec3_fa80_e493,
+    ]));*/
+    fn inverse(&self) -> Option<Self> {
+        Some(Self(self.0.invert().unwrap()))
+    }
+
+    fn square(&self) -> Self {
+        Self(self.0.square())
+    }
+
+
+    fn double(&self) -> Self {
+        let mut out= *self;
+        out.0.add_assign(self.0);
+        out
+    }
+
+    fn from_underlying_arr(arr: &[u64; 6]) -> Self {
+        Self(Fp { 0: *arr })
+    }
+
+    fn neg_assign(&mut self) {
+        self.0 = self.0.neg();
+    }
+
+    fn mul_assign_fp(&mut self, b: &Self) {
+        Fp::mul_assign(&mut self.0, &b.0)
+    }
+
+    fn sub_assign_fp(&mut self, b: &Self) {
+        self.0.sub_assign(&b.0);
+    }
+
+    fn add_assign_fp(&mut self, b: &Self) {  //cai
+        self.0.add_assign(&b.0);
+    }
+}
+
+impl G1GetFp<FsFp> for ZG1 {
+    fn x(&self) -> &FsFp {
+        unsafe {
+            // Transmute safe due to repr(C) on FsFp
+            core::mem::transmute(&self.proj.x)
+        }
+    }
+
+    fn y(&self) -> &FsFp {
+        unsafe {
+            // Transmute safe due to repr(C) on FsFp
+            core::mem::transmute(&self.proj.y)
+        }
+    }
+
+    fn z(&self) -> &FsFp {
+        unsafe {
+            // Transmute safe due to repr(C) on FsFp
+            core::mem::transmute(&self.proj.z)
+        }
+    }
+
+    fn x_mut(&mut self) -> &mut FsFp {
+        unsafe {
+            // Transmute safe due to repr(C) on FsFp
+            core::mem::transmute(&mut self.proj.x)
+        }
+    }
+
+    fn y_mut(&mut self) -> &mut FsFp {
+        unsafe {
+            // Transmute safe due to repr(C) on FsFp
+            core::mem::transmute(&mut self.proj.y)
+        }
+    }
+
+    fn z_mut(&mut self) -> &mut FsFp {
+        unsafe {
+            // Transmute safe due to repr(C) on FsFp
+            core::mem::transmute(&mut self.proj.z)
+        }
+    }
+}
+
+
+
+#[repr(C)]
+#[derive(Debug, Default, Clone, Copy, Eq, PartialEq)]
+pub struct FsG1Affine(pub G1Affine);
+use kzg::G1Affine as KzgAffine;
+use group::Curve;
+
+impl FsG1Affine {
+    fn from_zg1(proj: ZG1) -> Self { //CIA
+        FsG1Affine {
+            0: G1Projective::to_affine(&proj.proj),
+        }
+    }
+    pub fn new(g1_affine: G1Affine) -> Self {
+         FsG1Affine(g1_affine)
+    }
+}
+impl KzgAffine<ZG1, FsFp> for FsG1Affine {
+    fn into_affine(g1: &ZG1) -> Self {
+        FsG1Affine { 0: G1Projective::to_affine(&g1.proj) }
+    }
+    fn into_affines_loc(out: &mut [Self], g1: &[ZG1]) {
+        out.copy_from_slice(&Self::into_affines(g1));
+    }
+
+    fn into_affines(g1: &[ZG1]) -> Vec<FsG1Affine> {
+        let points  =
+            unsafe { core::slice::from_raw_parts(g1.as_ptr() as *const G1Projective, g1.len()) };
+        let mut g1_affine_batch: Vec<G1Affine> = vec![G1Affine::default(); points.len()];
+        G1Projective::batch_normalize(points, &mut g1_affine_batch);
+        unsafe {
+            core::mem::transmute(g1_affine_batch)
+        }
+    }
+
+    fn x(&self) -> &FsFp {
+        unsafe {
+            core::mem::transmute(&self.0.x)
+        }
+    }
+
+    fn y(&self) -> &FsFp {
+        unsafe {
+            core::mem::transmute(&self.0.y)
+        }
+    }
+
+    fn x_mut(&mut self) -> &mut FsFp {
+        unsafe { core::mem::transmute(&mut self.0.x) }
+    }
+
+    fn y_mut(&mut self) -> &mut FsFp {
+        unsafe { core::mem::transmute(&mut self.0.y) }
+    }
+
+    fn is_infinity(&self) -> bool {
+        bool::from(self.0.infinity)
+    }
+
+    fn to_proj(&self) -> ZG1 {
+         ZG1{
+             proj: G1Projective::from(&self.0)
+         }
+    }
+
+    fn ZERO() -> Self {
+        Self {
+            0 : G1Affine {
+                x: Fp::zero(),
+                y: Fp::zero(),
+                infinity: Choice::from(1),
+            },
+        }
+    }
+}
+
+
+pub struct FsG1ProjAddAffine;
+impl G1ProjAddAffine<ZG1, FsFp, FsG1Affine> for FsG1ProjAddAffine {
+    fn add_assign_affine(proj: &mut ZG1, aff: &FsG1Affine) {
+        proj.proj.add_mixed(&aff.0);
+    }
+
+    fn add_or_double_assign_affine(proj: &mut ZG1, aff: &FsG1Affine) {
+        proj.proj += aff.0;
+    }
+}
+

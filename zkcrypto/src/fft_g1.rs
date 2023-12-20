@@ -1,16 +1,23 @@
 use crate::consts::G1_GENERATOR;
 use crate::kzg_proofs::FFTSettings;
-use crate::kzg_types::{ZFr, ZG1};
+use crate::kzg_types::{FsFp, FsG1Affine, FsG1ProjAddAffine, ZFr, ZG1};
 use crate::multiscalar_mul::msm_variable_base;
-use kzg::{Fr as KzgFr, G1Mul};
+use kzg::{Fr as KzgFr, G1Affine, G1Mul, Scalar256};
 use kzg::{FFTG1, G1};
 use std::ops::MulAssign;
+use bls12_381 ::Scalar;
+use kzg::msm::msm_impls::msm;
 
-#[warn(unused_variables)]
+/*#[warn(unused_variables)]
 pub fn g1_linear_combination(out: &mut ZG1, points: &[ZG1], scalars: &[ZFr], _len: usize) {
     let g1 = msm_variable_base(points, scalars);
     out.proj = g1
+}*/
+
+pub fn g1_linear_combination(out: &mut ZG1, points: &[ZG1], scalars: &[ZFr], len: usize) {
+    *out = msm::<ZG1, FsFp, FsG1Affine, FsG1ProjAddAffine, ZFr>(points, scalars, len);
 }
+
 pub fn make_data(data: usize) -> Vec<ZG1> {
     let mut vec = Vec::new();
     if data != 0 {
