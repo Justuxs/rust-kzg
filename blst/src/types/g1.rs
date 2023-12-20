@@ -5,6 +5,7 @@ use core::ptr;
 use alloc::format;
 use alloc::string::String;
 use alloc::string::ToString;
+use alloc::vec::Vec;
 
 use blst::p1_affines;
 use blst::{
@@ -273,16 +274,18 @@ impl G1Mul<FsFr> for FsG1 {
 pub struct FsG1Affine(pub blst_p1_affine);
 
 impl G1Affine<FsG1, FsFp> for FsG1Affine {
-
-    fn ZERO() -> Self {
-        Self {
-            0 : blst_p1_affine {
-                x: blst_fp { l: [0, 0, 0, 0, 0, 0] },
-                y: blst_fp { l: [0, 0, 0, 0, 0, 0] },
+    const ZERO: Self = Self(blst_p1_affine {
+        x: {
+            blst_fp {
+                l: [0, 0, 0, 0, 0, 0],
             }
-        }
-    }
-
+        },
+        y: {
+            blst_fp {
+                l: [0, 0, 0, 0, 0, 0],
+            }
+        },
+    });
 
     fn into_affine(g1: &FsG1) -> Self {
         let mut ret: Self = Default::default();
@@ -347,10 +350,6 @@ impl G1Affine<FsG1, FsFp> for FsG1Affine {
             // Transmute safe due to repr(C) on FsFp
             core::mem::transmute(&mut self.0.y)
         }
-    }
-
-    fn add_mixed(&self, g1: &FsG1) -> FsG1 {
-        g1.add(&self.to_proj())
     }
 }
 

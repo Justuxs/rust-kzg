@@ -65,6 +65,8 @@ pub trait Fr: Default + Clone + PartialEq + Sync {
     fn eq(&self, other: &Self) -> bool {
         self.equals(other)
     }
+
+    fn to_scalar(&self) -> Scalar256;
 }
 
 pub trait G1: Clone + Default + PartialEq + Sync + Debug + Send {
@@ -195,10 +197,7 @@ pub trait G1Fp: Clone + Default + Sync + Copy + PartialEq + Debug + Send {
 pub trait G1Affine<TG1: G1, TG1Fp: G1Fp>:
     Clone + Default + PartialEq + Sync + Copy + Debug + Send
 {
-
-    fn add_mixed(&self, g1: &TG1) -> TG1;
-
-    fn ZERO() -> Self;
+    const ZERO: Self;
 
     fn into_affine(g1: &TG1) -> Self;
 
@@ -234,11 +233,11 @@ pub trait G1Affine<TG1: G1, TG1Fp: G1Fp>:
 
     // Return whether Affine is zero
     fn is_zero(&self) -> bool {
-        *self == Self::ZERO()
+        *self == Self::ZERO
     }
 
     fn set_zero(&mut self) {
-        *self = Self::ZERO();
+        *self = Self::ZERO;
     }
 }
 
