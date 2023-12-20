@@ -32,6 +32,7 @@ use kzg::{
     G1Mul, G1ProjAddAffine, G2Mul, KZGSettings, PairingVerify, Poly, G1, G2,
 };
 use std::ops::{AddAssign, Mul, Neg, Sub};
+use ark_ec::bn::G1Projective;
 
 fn bytes_be_to_uint64(inp: &[u8]) -> u64 {
     u64::from_be_bytes(inp.try_into().expect("Input wasn't 8 elements..."))
@@ -946,6 +947,10 @@ impl G1AffineTrait<ArkG1, ArkFp> for ArkG1Affine {
 
     fn y_mut(&mut self) -> &mut ArkFp {
         unsafe { core::mem::transmute(&mut self.aff.y) }
+    }
+
+    fn add_mixed(&self, g1: &ArkG1) -> ArkG1 {
+        g1.add(&self.to_proj())
     }
 }
 

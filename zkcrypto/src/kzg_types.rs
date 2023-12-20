@@ -873,6 +873,10 @@ impl KzgAffine<ZG1, FsFp> for FsG1Affine {
             },
         }
     }
+    fn add_mixed(&self, g1: &ZG1) -> ZG1 {
+        let rez = G1Affine::add(self.0,g1.proj);
+        ZG1 { proj: rez }
+    }
     fn into_affine(g1: &ZG1) -> Self {
         FsG1Affine { 0: G1Projective::to_affine(&g1.proj) }
     }
@@ -883,7 +887,7 @@ impl KzgAffine<ZG1, FsFp> for FsG1Affine {
     fn into_affines(g1: &[ZG1]) -> Vec<FsG1Affine> {
         let points  =
             unsafe { core::slice::from_raw_parts(g1.as_ptr() as *const G1Projective, g1.len()) };
-        let mut g1_affine_batch: Vec<G1Affine> = Vec::with_capacity(points.len());
+        let mut g1_affine_batch: Vec<G1Affine> = vec![G1Affine::default(); points.len()];
         G1Projective::batch_normalize(points, &mut g1_affine_batch);
         unsafe {
             core::mem::transmute(g1_affine_batch)

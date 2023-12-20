@@ -348,6 +348,10 @@ impl G1Affine<FsG1, FsFp> for FsG1Affine {
             core::mem::transmute(&mut self.0.y)
         }
     }
+
+    fn add_mixed(&self, g1: &FsG1) -> FsG1 {
+        g1.add(&self.to_proj())
+    }
 }
 
 pub struct FsG1ProjAddAffine;
