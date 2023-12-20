@@ -266,7 +266,7 @@ pub trait G1ProjAddAffine<TG1: G1, TG1Fp: G1Fp, TG1Affine: G1Affine<TG1, TG1Fp>>
 
 #[derive(Debug, Default, PartialEq, Eq, Clone, Copy)]
 pub struct Scalar256 {
-    data: [u64; 4],
+    pub data: [u64; 4],
 }
 
 #[allow(unused)]

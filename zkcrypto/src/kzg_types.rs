@@ -16,7 +16,7 @@ use blst::{blst_fp, blst_fr, blst_p1, blst_p1_affine};
 use ff::Field;
 use kzg::common_utils::reverse_bit_order;
 use kzg::eip_4844::{BYTES_PER_FIELD_ELEMENT, BYTES_PER_G1, BYTES_PER_G2};
-use kzg::{FFTFr, FFTSettings, Fr as KzgFr, G1Mul, G2Mul, KZGSettings, PairingVerify, Poly, G1, G2, G1Fp, G1ProjAddAffine};
+use kzg::{FFTFr, FFTSettings, Fr as KzgFr, G1Mul, G2Mul, KZGSettings, PairingVerify, Poly, G1, G2, G1Fp, G1ProjAddAffine, Scalar256, G1GetFp};
 use std::ops::{Add, AddAssign, Mul, MulAssign, Neg, Sub, SubAssign};
 use std::ptr;
 use ff::derive::bitvec::macros::internal::funty::Fundamental;
@@ -282,6 +282,12 @@ impl KzgFr for ZFr {
 
     fn equals(&self, b: &Self) -> bool {
         self.fr == b.fr
+    }
+
+    fn to_scalar(&self) -> Scalar256 {
+        Scalar256{
+            data: self.fr.0
+        }
     }
 }
 
@@ -847,6 +853,52 @@ impl G1Fp for FsFp {
     }
 }
 
+impl G1GetFp<FsFp> for ZG1 {
+    fn x(&self) -> &FsFp {
+        unsafe {
+            // Transmute safe due to repr(C) on FsFp
+            core::mem::transmute(&self.proj.x)
+        }
+    }
+
+    fn y(&self) -> &FsFp {
+        unsafe {
+            // Transmute safe due to repr(C) on FsFp
+            core::mem::transmute(&self.proj.y)
+        }
+    }
+
+    fn z(&self) -> &FsFp {
+        unsafe {
+            // Transmute safe due to repr(C) on FsFp
+            core::mem::transmute(&self.proj.z)
+        }
+    }
+
+    fn x_mut(&mut self) -> &mut FsFp {
+        unsafe {
+            // Transmute safe due to repr(C) on FsFp
+            core::mem::transmute(&mut self.proj.x)
+        }
+    }
+
+    fn y_mut(&mut self) -> &mut FsFp {
+        unsafe {
+            // Transmute safe due to repr(C) on FsFp
+            core::mem::transmute(&mut self.proj.y)
+        }
+    }
+
+    fn z_mut(&mut self) -> &mut FsFp {
+        unsafe {
+            // Transmute safe due to repr(C) on FsFp
+            core::mem::transmute(&mut self.proj.z)
+        }
+    }
+}
+
+
+
 #[repr(C)]
 #[derive(Debug, Default, Clone, Copy, Eq, PartialEq)]
 pub struct FsG1Affine(pub G1Affine);
@@ -864,19 +916,6 @@ impl FsG1Affine {
     }
 }
 impl KzgAffine<ZG1, FsFp> for FsG1Affine {
-    fn ZERO() -> Self {
-        Self {
-            0 : G1Affine {
-                x: Fp::zero(),
-                y: Fp::zero(),
-                infinity: Choice::from(1),
-            },
-        }
-    }
-    fn add_mixed(&self, g1: &ZG1) -> ZG1 {
-        let rez = G1Affine::add(self.0,g1.proj);
-        ZG1 { proj: rez }
-    }
     fn into_affine(g1: &ZG1) -> Self {
         FsG1Affine { 0: G1Projective::to_affine(&g1.proj) }
     }
@@ -923,6 +962,14 @@ impl KzgAffine<ZG1, FsFp> for FsG1Affine {
              proj: G1Projective::from(&self.0)
          }
     }
+
+    const ZERO: Self = (Self {
+        0 : G1Affine {
+            x: Fp::zero(),
+            y: Fp::zero(),
+            infinity: Choice::from(1),
+        },
+    });
 }
 
 
